@@ -1,0 +1,42 @@
+# requirements.txt
+# [V-FINAL] L-CARE项目依赖清单
+
+# --- Core ML/DL Libraries ---
+# 使用与A100 GPU兼容的CUDA 12.1版本的PyTorch
+torch>=2.3.0
+torchvision>=0.18.0
+torchaudio>=2.3.0
+
+# Hugging Face生态系统
+transformers>=4.40.0
+datasets>=2.15.0
+accelerate>=0.29.0
+peft>=0.10.0 # 支持LoRA
+bitsandbytes>=0.42.0 # for 8-bit/4-bit quantization (可选)
+
+# --- RL & Environment ---
+gymnasium>=0.29.0
+# [修复] 为代码中的 np 调用添加 numpy 依赖
+numpy>=1.23.0
+# faiss-gpu # 如果您的CUDA版本匹配，可以直接安装
+# 推荐使用conda安装Faiss以避免编译问题: conda install -c pytorch faiss-gpu
+
+# --- Data & Configuration ---
+pandas>=2.0.0
+pyarrow>=14.0.0
+# Hydra for configuration management
+hydra-core>=1.3.2
+omegaconf>=2.3.0
+colorlog>=6.7.0 # for pretty Hydra logging
+
+# --- Utilities ---
+tqdm>=4.65.0
+wandb>=0.16.0 # For experiment logging & tracking
+sentence-transformers>=2.2.2 # 用于通用的句子嵌入模型（如果需要）
+requests>=2.31.0
+
+# --- Math Verification ---
+# sympy用于数学表达式的等价性判断
+sympy>=1.12
+# verifier 所需要的包库
+openai>=1.0.0

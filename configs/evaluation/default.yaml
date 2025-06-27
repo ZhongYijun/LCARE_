@@ -1,0 +1,25 @@
+## configs/evaluation/default.yaml
+## [UPDATED & CORRECTED]
+#
+#output_dir: "outputs/eval_results/${experiment_name}"
+#model_path: "outputs/init_policy_sft_checkpoint"
+#batch_size: 32
+#
+## [MODIFIED] 数据集列表现在从 data 配置中继承
+## evaluation.py 将会遍历 config.data.evaluation_datasets
+#datasets: ${data.evaluation_datasets}
+
+# configs/evaluation/default.yaml
+# [OPTIMIZED]
+
+output_dir: "outputs/eval_results/${experiment_name}"
+model_path: "outputs/init_policy_sft_checkpoint"
+
+# [AGGRESSIVE] 评估阶段也可以充分利用H200的性能
+batch_size: 256
+
+datasets: ${data.evaluation_datasets}
+
+verifier_config:
+  use_llm_judger_in_rl: true # RL训练时启用LLM Judger
+  max_retries: 3

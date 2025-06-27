@@ -1,0 +1,59 @@
+# configs/trainer/rl_agent_final.yaml
+# [FINAL AGGRESSIVE VERSION] 为8x H200设计的极致性能RL配置
+
+_target_: src.trainers.rl_agent.LCARE_Agent
+
+initial_policy_path: "${...trainer.sft.output_dir}"
+
+# [CRITICAL] 在RL阶段，我们将覆盖模型的默认设置，禁用LoRA以进行全参数微调
+use_lora: false
+
+env:
+  problem_set_path: "${data.processed_dir}/${data.rl_prompt_file}"
+  max_steps_per_episode: 32
+
+exploration:
+  total_iterations: 100
+  # 每次迭代采集海量数据, 为高强度更新提供养料
+  rollouts_per_iteration: 1024
+  learning_starts: 1024 # Buffer中至少有1024条轨迹才开始学习
+  use_lge: true
+  use_token_reward_model: true
+  lge_config:
+    archive_capacity: 100000
+    k_nearest_neighbors: 5
+    bonus_coef: 0.001
+
+buffer:
+  capacity: 100000 # 极大地增加Buffer容量
+  rebuild_index_freq: 10
+  use_her: true
+  use_per: true
+  her_k_relabel: 4
+  alpha: 0.6
+  beta: 0.4
+  positive_capacity: 20000
+
+algorithm:
+  learning_rate: 5.0e-7
+  trm_learning_rate: 2.0e-6
+  trm_warmup_steps: 10
+  bc_loss_weight: 0.1
+
+  # [AGGRESSIVE] 大幅增加PPO更新的深度和广度
+  ppo_epochs: 16
+  batch_size: 4096 # 全局批大小2048，每卡256，完美匹配H200
+
+  clip_epsilon: 0.2
+  vf_coef: 0.5
+  entropy_coef: 0.01
+  kl_coef: 0.01
+  gamma: 0.99
+  tau_gae: 0.95
+
+saving:
+  checkpoint_dir: "outputs/${experiment_name}/checkpoints"
+  save_interval: 10
+
+verifier:
+  hosts: []

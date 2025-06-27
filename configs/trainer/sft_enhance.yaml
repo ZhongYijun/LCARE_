@@ -1,0 +1,11 @@
+# configs/trainer/sft_enhance.yaml
+# 技能增强SFT阶段的配置
+_target_: src.trainers.sft_trainer.SFTTrainer
+model_path: "path/to/your/rl_checkpoint" # 需要在命令行中动态指定
+sft_data_path: "${data.processed_dir}/${skill_enhancement.output_file}"
+output_dir: "${..model_path}/enhanced"
+use_lora: true
+max_length: 8192
+batch_size_per_gpu: 16
+epochs: 4
+learning_rate: 5.0e-6 # 使用更小的学习率进行微调

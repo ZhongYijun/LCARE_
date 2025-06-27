@@ -1,0 +1,30 @@
+## configs/trainer/sft.yaml
+## 冷启动SFT阶段的配置
+#_target_: src.trainers.sft_trainer.SFTTrainer
+#model_path: "Qwen/Qwen2.5-7B-Instruct"
+#sft_data_path: "${data.processed_dir}/${data.sft_train_file}"
+#output_dir: "outputs/init_policy_sft_checkpoint"
+#use_lora: true
+#max_length: 8192
+#batch_size_per_gpu: 16
+#epochs: 10
+#learning_rate: 2.0e-5
+
+# configs/trainer/sft.yaml
+# [AGGRESSIVE] 为8x H200优化的SFT配置
+
+_target_: src.trainers.sft_trainer.SFTTrainer
+
+model_path: "Qwen/Qwen2.5-7B-Instruct"
+sft_data_path: "${data.processed_dir}/${data.sft_train_file}"
+output_dir: "outputs/init_policy_sft_checkpoint"
+
+use_lora: true # SFT阶段依然使用LoRA以求快速
+max_length: 8192
+
+# [AGGRESSIVE] 极大地增加单卡批大小，让H200的显存饱和
+# 全局批大小将达到 16 * 8 = 128
+batch_size_per_gpu: 32
+
+epochs: 2
+learning_rate: 2.0e-5

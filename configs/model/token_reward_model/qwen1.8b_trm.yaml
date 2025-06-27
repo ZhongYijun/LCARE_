@@ -1,0 +1,2 @@
+# configs/model/token_reward_model/qwen1.8b_trm.yaml
+path: "Qwen/Qwen2.5-7B-Instruct"

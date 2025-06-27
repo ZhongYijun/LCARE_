@@ -1,0 +1,27 @@
+# configs/lcare_config.yaml
+# [V-FINAL CORRECTED] 主配置文件，现在通过 'defaults' 加载数据配置。
+
+defaults:
+  - data: math_suite  # [CRITICAL] 加载我们统一的数据配置文件
+  - model: qwen8b_3b_critic
+  - trainer: rl_agent_ablation
+  - evaluation: default
+  - _self_
+# 任务控制: 'process_data', 'train_sft', 'train_rl', 'evaluate', 'create_enhancement_data'
+main:
+  task: train_rl
+
+project_name: "L-CARE"
+experiment_name: "L-CARE_SOTA_Run"
+seed: 42
+
+logging:
+  use_wandb: true
+  wandb_entity: "fbaiudbdabwid"
+
+# 技能增强配置
+skill_enhancement:
+  enabled: true
+  failed_samples_file: "detailed_results_MATH.jsonl"
+  max_samples: 5000
+  num_weakest_skills_to_focus: 3
