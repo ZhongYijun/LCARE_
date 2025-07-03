@@ -103,85 +103,62 @@
 #         data_idx = leaf_idx - self.capacity + 1
 #         return leaf_idx, self.tree[leaf_idx], self.data[data_idx]
 
-# src/rl/sum_tree.py
-
+# [L-CARE V14]
 import numpy as np
 from typing import Any
 
 
 class SumTree:
-    """
-    [CARE-V1.1] 一个用于优先经验回放(PER)的SumTree数据结构。
-    - 修复了所有类型提示问题，以匹配严格的静态检查。
-    """
-
     def __init__(self, capacity: int):
         if not isinstance(capacity, int) or capacity <= 0:
             raise ValueError(f"Capacity must be a positive integer, got {capacity}")
 
         self.capacity = capacity
-        # 树的节点总数是 2 * capacity - 1
         self.tree = np.zeros(2 * capacity - 1)
-        # 实际的数据指针存储
         self.data = np.zeros(capacity, dtype=object)
         self.data_pointer = 0
         self.size = 0
 
     @property
     def total_priority(self) -> float:
-        """
-        [FIX] 返回所有优先级的总和。
-        显式转换为float以满足类型提示。
-        """
         return float(self.tree[0])
 
     def add(self, priority: float, data: Any):
-        """向树中添加一个新样本及其优先级。"""
         tree_idx = self.data_pointer + self.capacity - 1
-
         self.data[self.data_pointer] = data
         self.update(tree_idx, priority)
-
-        self.data_pointer += 1
-        if self.data_pointer >= self.capacity:
-            self.data_pointer = 0  # 循环写入
-
+        self.data_pointer = (self.data_pointer + 1) % self.capacity
         if self.size < self.capacity:
             self.size += 1
 
     def update(self, tree_idx: int, priority: float):
-        """更新指定索引的数据的优先级，并沿树向上传播变化。"""
-        if tree_idx < 0 or tree_idx >= len(self.tree):
-            return # 安全检查
-
+        if not 0 <= tree_idx < len(self.tree): return
         change = priority - self.tree[tree_idx]
         self.tree[tree_idx] = priority
-
-        # 只要不是根节点，就继续向上传播
         while tree_idx != 0:
             tree_idx = (tree_idx - 1) // 2
             self.tree[tree_idx] += change
 
     def get(self, s: float) -> tuple[int, float, Any]:
-        """
-        [FIX] 根据给定的累积优先级值s，从树中采样一个样本。
-        显式转换为float以满足类型提示。
-        """
         parent_idx = 0
         while True:
             left_child_idx = 2 * parent_idx + 1
-            
-            # 如果左子节点超出范围，说明当前parent_idx就是叶子节点
             if left_child_idx >= len(self.tree):
                 leaf_idx = parent_idx
                 break
-            
             right_child_idx = left_child_idx + 1
             if s <= self.tree[left_child_idx]:
                 parent_idx = left_child_idx
             else:
                 s -= self.tree[left_child_idx]
                 parent_idx = right_child_idx
-
         data_idx = leaf_idx - self.capacity + 1
         return leaf_idx, float(self.tree[leaf_idx]), self.data[data_idx]
+
+    # [V14] 新增: 获取当前树中最大的叶子节点优先级
+    def get_max_priority(self) -> float:
+        """Returns the maximum priority among the leaves."""
+        if self.size == 0:
+            return 1.0
+        # 叶子节点存储在树数组的后半部分
+        return float(np.max(self.tree[-self.capacity:]))

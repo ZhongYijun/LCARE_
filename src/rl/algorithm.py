@@ -135,7 +135,6 @@ import numpy as np
 from transformers import AutoTokenizer
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from src.models.actor_critic import LCARE_Actor, LCARE_Critic
 
 def masked_mean(values: torch.Tensor, mask: torch.Tensor, dim: int = None) -> torch.Tensor:
     if dim is not None:
@@ -152,21 +151,23 @@ def masked_var(values: torch.Tensor, mask: torch.Tensor, unbiased: bool = True) 
             variance = variance * mask_sum / (mask_sum - 1)
     return variance
 
-def compute_gae(rewards: np.ndarray, values: np.ndarray, dones: np.ndarray, response_mask: np.ndarray, gamma: float, tau: float) -> Tuple[np.ndarray, np.ndarray]:
+
+def compute_gae(rewards: np.ndarray, values: np.ndarray, dones: np.ndarray, response_mask: np.ndarray, gamma: float,
+                tau: float) -> Tuple[np.ndarray, np.ndarray]:
     advantages_reversed = []
     last_gae_lam = 0
-    
+
     next_values = np.concatenate([values[1:], [0]])
-    
+
     for t in reversed(range(len(rewards))):
         next_non_terminal = 1.0 - dones[t]
         delta = rewards[t] + gamma * next_values[t] * next_non_terminal - values[t]
         last_gae_lam = delta + gamma * tau * next_non_terminal * last_gae_lam
         advantages_reversed.append(last_gae_lam)
-    
+
     advantages = np.array(advantages_reversed[::-1])
     returns = advantages + values
-    
+
     # 对优势进行白化 (Normalization)
     response_mask_bool = response_mask.astype(bool)
     if response_mask_bool.any():
@@ -174,13 +175,14 @@ def compute_gae(rewards: np.ndarray, values: np.ndarray, dones: np.ndarray, resp
         adv_tensor = torch.from_numpy(advantages)
         mask_tensor = torch.from_numpy(response_mask)
         whitened_advantages = (adv_tensor - masked_mean(adv_tensor, mask_tensor)) / (
-                    torch.sqrt(masked_var(adv_tensor, mask_tensor)) + 1e-8)
+                torch.sqrt(masked_var(adv_tensor, mask_tensor)) + 1e-8)
         whitened_advantages = whitened_advantages.numpy() * response_mask
     else:
         # 如果response_mask全为False，直接返回原始的advantages，不进行白化
         whitened_advantages = advantages
 
     return whitened_advantages, returns
+
 
 class OffPolicyPPO_Trainer:
     def __init__(self, actor: DDP, critic: DDP, optimizer: torch.optim.Optimizer,

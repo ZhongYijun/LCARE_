@@ -17,6 +17,7 @@ model_path: "outputs/init_policy_sft_checkpoint"
 
 # [AGGRESSIVE] 评估阶段也可以充分利用H200的性能
 batch_size: 256
+load_lora_adapter: true
 
 datasets: ${data.evaluation_datasets}
 

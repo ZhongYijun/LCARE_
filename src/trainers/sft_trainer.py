@@ -413,7 +413,7 @@
 #         if is_main_process(): print(
 #             f"Resumed from iteration {self.start_iteration - 1}. Current timesteps: {self.timesteps}")
 
-# src/trainers/sft_trainer.py (FINAL & OPTIMIZED)
+# src/trainers/sft_trainer.py (ULTIMATE FOOLPROOF SAVE LOGIC)
 
 import os
 import functools
@@ -422,9 +422,8 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
-from torch.distributed.fsdp import FullStateDictConfig
-from peft import get_peft_model, LoraConfig, PeftModel
+from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType, FullStateDictConfig
+from peft import get_peft_model, LoraConfig, PeftModel, get_peft_model_state_dict
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler, PreTrainedModel
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
@@ -436,11 +435,6 @@ from src.utils.distributed_utils import is_main_process, get_rank
 
 
 class SFTTrainer:
-    """
-    [FINAL & OPTIMIZED] SFT Trainer.
-    - Integrated with torch.compile, Flash Attention 2, Fused Optimizers, and DataLoader optimizations.
-    """
-
     def __init__(self, config: DictConfig, rank: int, world_size: int, logger: SwanLabLogger):
         self.config = config
         self.sft_config = config.trainer
@@ -450,147 +444,142 @@ class SFTTrainer:
         self.device = torch.device(f"cuda:{rank}")
         self.logger = logger
         model_path = self.sft_config.get("model_path", self.model_config.path)
-        use_lora = self.sft_config.get("use_lora", self.model_config.get("use_lora", False))
+        self.use_lora = self.sft_config.get("use_lora", self.model_config.get("use_lora", False))
+
+        if not self.use_lora:
+            raise NotImplementedError(
+                "This SFT trainer is specifically designed and debugged for LoRA training with FSDP.")
+
         if is_main_process(): print(f"SFT Trainer using model path: {model_path}")
+
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         if self.tokenizer.pad_token is None: self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # OPTIMIZATION 1: Use Flash Attention 2 if available
+        if is_main_process(): print(f"Loading base model from {model_path} for SFT...")
+
         model_kwargs = {'trust_remote_code': True}
         if config.get("use_flash_attention_2", True):
             model_kwargs['attn_implementation'] = "flash_attention_2"
-            if is_main_process(): print("Attempting to enable Flash Attention 2...")
 
-        if is_main_process(): print(f"Loading base model from {model_path} for SFT...")
         model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, **model_kwargs)
         model.gradient_checkpointing_enable()
 
-        if use_lora:
-            if is_main_process(): print("Applying LoRA...")
-            if not hasattr(self.model_config, 'lora_config'): raise ValueError(
-                "`use_lora` is true, but `lora_config` is not defined in the model configuration.")
-            lora_config_dict = OmegaConf.to_container(self.model_config.lora_config, resolve=True)
-            lora_config = LoraConfig(**lora_config_dict)
-            model = get_peft_model(model, lora_config)
-            if is_main_process(): model.print_trainable_parameters()
-
-        # OPTIMIZATION 2: Use torch.compile
-        if self.config.get("use_torch_compile", True):
-            if is_main_process(): print("Applying torch.compile to the SFT model...")
-            try:
-                model = torch.compile(model)
-            except Exception as e:
-                if is_main_process(): print(f"Warning: torch.compile failed, proceeding without it. Error: {e}")
+        if is_main_process(): print("Applying LoRA...")
+        lora_config_dict = OmegaConf.to_container(self.model_config.lora_config, resolve=True)
+        lora_config = LoraConfig(**lora_config_dict)
+        model = get_peft_model(model, lora_config)
+        if is_main_process(): model.print_trainable_parameters()
 
         try:
             transformer_block_class = self._get_transformer_layer_class(model)
-            if is_main_process(): print(
-                f"Found transformer layer class to wrap with FSDP: {transformer_block_class.__name__}")
         except ValueError as e:
-            print(f"Error: Could not automatically determine the transformer layer class for FSDP wrapping. {e}")
+            if is_main_process(): print(f"FATAL: Could not find transformer layer for FSDP wrapping. {e}")
             if dist.is_initialized(): dist.destroy_process_group()
             exit(1)
 
-        transformer_layer_cls_set = {transformer_block_class}
         auto_wrap_policy = functools.partial(transformer_auto_wrap_policy,
-                                             transformer_layer_cls=transformer_layer_cls_set)
-        use_orig_params_for_fsdp = use_lora
+                                             transformer_layer_cls={transformer_block_class})
+
         fsdp_dtype = torch.bfloat16
         model = model.to(dtype=fsdp_dtype)
+
         mixed_precision_policy = torch.distributed.fsdp.MixedPrecision(param_dtype=fsdp_dtype, reduce_dtype=fsdp_dtype,
                                                                        buffer_dtype=fsdp_dtype)
+
         self.model = FSDP(model, auto_wrap_policy=auto_wrap_policy, device_id=self.device,
-                          use_orig_params=use_orig_params_for_fsdp, mixed_precision=mixed_precision_policy)
-        dist.barrier(device_ids=[self.rank])
+                          use_orig_params=self.use_lora, mixed_precision=mixed_precision_policy)
+
+        dist.barrier()
         if is_main_process(): print("✅ FSDP model wrapped successfully.")
 
         train_dataset = SFTDataset(self.sft_config.sft_data_path, self.tokenizer, max_length=self.sft_config.max_length)
         train_sampler = DistributedSampler(train_dataset, num_replicas=self.world_size, rank=self.rank, shuffle=True)
         collate_with_tokenizer = partial(collate_fn_sft, tokenizer=self.tokenizer)
 
-        # OPTIMIZATION 3: Improve DataLoader performance
-        dl_kwargs = {'num_workers': 4, 'pin_memory': True} if torch.cuda.is_available() else {}
         self.train_dataloader = DataLoader(train_dataset, batch_size=self.sft_config.batch_size_per_gpu,
-                                           sampler=train_sampler, collate_fn=collate_with_tokenizer, **dl_kwargs)
+                                           sampler=train_sampler, num_workers=self.sft_config.get("num_workers", 4),
+                                           pin_memory=True, collate_fn=collate_with_tokenizer)
 
-        # OPTIMIZATION 4: Use Fused AdamW
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.sft_config.learning_rate, fused=True)
-
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.sft_config.learning_rate)
         num_training_steps = self.sft_config.epochs * len(self.train_dataloader)
+
         self.lr_scheduler = get_scheduler(name="cosine", optimizer=self.optimizer,
                                           num_warmup_steps=int(0.03 * num_training_steps),
                                           num_training_steps=num_training_steps)
 
     @staticmethod
     def _get_transformer_layer_class(model: PreTrainedModel) -> type:
-        # Correctly handle compiled model
-        if hasattr(model, '_orig_mod'):
-            model = model._orig_mod
-        if isinstance(model, PeftModel):
-            model = model.get_base_model()
-
-        found_class = None
-        for name, module in model.named_modules():
+        if isinstance(model, PeftModel): model = model.get_base_model()
+        for _, module in model.named_modules():
             if "DecoderLayer" in module.__class__.__name__ or "TransformerBlock" in module.__class__.__name__:
-                found_class = module.__class__
-                break
-        if found_class is None: raise ValueError("Could not find a valid transformer layer class name.")
-        return found_class
+                return module.__class__
+        raise ValueError("Could not find a valid transformer layer class name.")
 
     def train(self):
         self.model.train()
         total_steps = 0
         for epoch in range(self.sft_config.epochs):
-            if isinstance(self.train_dataloader.sampler, DistributedSampler): self.train_dataloader.sampler.set_epoch(
-                epoch)
+            if isinstance(self.train_dataloader.sampler, DistributedSampler):
+                self.train_dataloader.sampler.set_epoch(epoch)
+
             pbar = tqdm(self.train_dataloader, disable=(not is_main_process()),
                         desc=f"SFT Epoch {epoch + 1}/{self.sft_config.epochs} | Rank {get_rank()}")
+
             for batch in pbar:
                 batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
-                outputs = self.model(**batch)
-                loss = outputs.loss
+                loss = self.model(**batch).loss
+
                 if is_main_process():
                     pbar.set_postfix({"loss": loss.item()})
                     self.logger.log({"sft/loss": loss.item(), "sft/lr": self.lr_scheduler.get_last_lr()[0]},
                                     step=total_steps)
+
                 loss.backward()
                 self.optimizer.step()
                 self.lr_scheduler.step()
                 self.optimizer.zero_grad()
                 total_steps += 1
-            dist.barrier(device_ids=[self.rank])
-        self.save_model()
+
+            dist.barrier()
 
     def save_model(self):
+        """
+        [ULTIMATE FOOLPROOF SAVE LOGIC]
+        This function is ONLY called by the main process (rank 0).
+        It explicitly gathers the full model state to CPU on Rank 0 before saving.
+        This is the most robust way to prevent timeouts with FSDP.
+        """
+        assert is_main_process(), "save_model() must only be called by the main process (rank 0)."
+
         output_dir = self.sft_config.output_dir
-        if is_main_process():
-            print(f"Starting model saving process to {output_dir}...")
+
+        print(f"\nRank 0: Starting model saving process to: {output_dir}")
+        if not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
 
-        dist.barrier()
-
+        # 1. 定义FSDP的参数聚合策略：聚合到CPU内存，且只有Rank 0接收。
         save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+
+        # 2. 使用FSDP的上下文管理器来应用此策略
+        print("Rank 0: Gathering full state dictionary from all ranks to CPU...")
         with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT, save_policy):
-            unwrapped_model = self.model.module
+            cpu_state_dict = self.model.state_dict()
+        print("Rank 0: State dictionary successfully gathered on CPU.")
 
-            if is_main_process():
-                print("Model state dict collected on Rank 0. Now saving to disk...")
-                use_lora = self.sft_config.get("use_lora", self.model_config.get("use_lora", False))
+        # 3. 从聚合后的完整参数中，提取出LoRA适配器的参数。
+        print("Rank 0: Extracting LoRA adapter weights from the state dictionary...")
+        lora_state_dict = get_peft_model_state_dict(self.model.module, state_dict=cpu_state_dict)
 
-                # Correctly unwrap the compiled model before saving
-                if hasattr(unwrapped_model, '_orig_mod'):
-                    unwrapped_model = unwrapped_model._orig_mod
+        # 4. 保存提取出的LoRA适配器参数为 adapter_model.bin
+        adapter_path = os.path.join(output_dir, "adapter_model.bin")
+        torch.save(lora_state_dict, adapter_path)
+        print(f"Rank 0: LoRA adapter weights saved to {adapter_path}")
 
-                if use_lora and isinstance(unwrapped_model, PeftModel):
-                    unwrapped_model.save_pretrained(output_dir)
-                    print("LoRA adapter saved using `save_pretrained`.")
-                else:
-                    cpu_state_dict = unwrapped_model.state_dict()
-                    torch.save(cpu_state_dict, os.path.join(output_dir, "pytorch_model.bin"))
-                    print("Full model state dict saved.")
+        # 5. 保存LoRA适配器的配置文件
+        self.model.module.save_adapter_config(output_dir)
+        print(f"Rank 0: LoRA adapter config saved to {output_dir}")
 
-                self.tokenizer.save_pretrained(output_dir)
-                print("Tokenizer saved.")
-                print(f"✅ SFT model saved successfully to {output_dir}.")
-
-        # dist.barrier()
+        # 6. 保存tokenizer
+        self.tokenizer.save_pretrained(output_dir)
+        print("Rank 0: Tokenizer saved.")
+        print(f"✅ Rank 0: All SFT artifacts saved successfully.")

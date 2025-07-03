@@ -24,6 +24,13 @@ class SwanLabLogger:
                 config=OmegaConf.to_container(config, resolve=True)
             )
 
+    def log_config(self, config_dict: dict):
+        if self.use_swanlab and self.rank == 0:
+            # SwanLab 的 init 已经接收了 config，但如果想更新或覆盖，可以使用 update_config
+            # swanlab.config.update(config_dict)
+            # 通常在init时传入就够了，这里可以留作一个空接口或打印信息
+            print("Logger: Configuration was logged at initialization.")
+
     def log(self, data: dict, step: int):
         """
         记录一个数据字典。
@@ -46,3 +53,4 @@ class SwanLabLogger:
         if self.use_swanlab and self.rank == 0:
             # [MODIFIED] 调用 swanlab.finish()
             swanlab.finish()
+
