@@ -11,6 +11,6 @@ echo "-----------------------------------------------------"
 
 # 使用我们新的主配置文件来运行数据处理任务
 # Hydra会根据 'main.task' 自动调用正确的功能
-python src/main.py --config-name=lcare_config_final main.task=process_data
+python main.py --config-name=lcare_config main.task=process_data
 
 echo "✅ Data preparation finished."
