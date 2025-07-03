@@ -1,2 +1,2 @@
 # configs/model/critic/qwen3b.yaml
-path: "Qwen/Qwen2.5-3B-Instruct"
+path: "models/Qwen2.5-3B-Instruct"

@@ -1,0 +1,19 @@
+# configs/model/lora_config_default.yaml
+#
+# 这是一个可重用的LoRA配置片段。
+# 任何需要LoRA的模型或训练器配置都可以引用它。
+
+lora_config:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"

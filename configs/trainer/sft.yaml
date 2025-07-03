@@ -1,30 +1,46 @@
-## configs/trainer/sft.yaml
-## 冷启动SFT阶段的配置
-#_target_: src.trainers.sft_trainer.SFTTrainer
-#model_path: "Qwen/Qwen2.5-7B-Instruct"
-#sft_data_path: "${data.processed_dir}/${data.sft_train_file}"
-#output_dir: "outputs/init_policy_sft_checkpoint"
-#use_lora: true
-#max_length: 8192
-#batch_size_per_gpu: 16
-#epochs: 10
-#learning_rate: 2.0e-5
+# # configs/trainer/sft.yaml
 
-# configs/trainer/sft.yaml
-# [AGGRESSIVE] 为8x H200优化的SFT配置
+# --- Part 0: Inherit Reusable Configs ---
+defaults:
+  # [CRITICAL FIX] 继承默认的LoRA配置。
+  # 这会将 `lora_config: {...}` 块注入到最终的配置中。
+  - /model: lora_config_default
 
+# --- Part 1: RFT Data Generation Config ---
+rft_generation:
+  model_path: "models/Qwen2.5-7B-Instruct"
+  num_samples_per_problem: 4
+  batch_size_per_gpu: 8
+  max_problems_to_process: 2500
+  target_accepted_samples: 2000
+
+# --- Part 2: SFT Trainer Config ---
 _target_: src.trainers.sft_trainer.SFTTrainer
 
-model_path: "Qwen/Qwen2.5-7B-Instruct"
-sft_data_path: "${data.processed_dir}/${data.sft_train_file}"
-output_dir: "outputs/init_policy_sft_checkpoint"
+model_path: "models/Qwen2.5-7B-Instruct"
+sft_data_path: "${data.processed_dir}/${data.rft_sft_file}"
+output_dir: "outputs/init_policy_rft_checkpoint"
 
-use_lora: true # SFT阶段依然使用LoRA以求快速
-max_length: 8192
-
-# [AGGRESSIVE] 极大地增加单卡批大小，让H200的显存饱和
-# 全局批大小将达到 16 * 8 = 128
-batch_size_per_gpu: 32
-
+use_lora: true # 这个开关告诉 trainer 需要应用LoRA
+max_length: 4096
+batch_size_per_gpu: 4
 epochs: 2
 learning_rate: 2.0e-5
+
+# --- Part 3: Verifier Config (CRITICAL FIX) ---
+# [FIXED] 将Verifier配置添加到了sft.yaml中，供RFT生成阶段使用。
+verifier:
+  # 总开关，在RFT阶段必须开启，以筛选高质量数据
+  use_llm_judger_in_rl: true
+    
+  # DeepSeek API服务地址列表。可以配置多个实现负载均衡。
+  hosts: ["api.deepseek.com"] 
+  
+  # DeepSeek API Key。
+  # 强烈建议使用环境变量 `export DEEPSEEK_API_KEY="your_key"`
+  # 如果环境变量未设置，代码会使用下面这个值作为后备。
+  api_key: "sk-6c947070444143cd85853da2f2c6551d"
+  
+  # API调用的重试配置
+  max_retries: 3
+  retry_delay: 1.0 # seconds

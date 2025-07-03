@@ -16,8 +16,7 @@ experiment_name: "L-CARE_SOTA_Run"
 seed: 42
 
 logging:
-  use_wandb: true
-  wandb_entity: "fbaiudbdabwid"
+  use_swanlab: true 
 
 # 技能增强配置
 skill_enhancement:

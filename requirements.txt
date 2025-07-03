@@ -7,6 +7,7 @@ torch>=2.3.0
 torchvision>=0.18.0
 torchaudio>=2.3.0
 
+modelscope>=1.9.5
 # Hugging Face生态系统
 transformers>=4.40.0
 datasets>=2.15.0
@@ -18,6 +19,7 @@ bitsandbytes>=0.42.0 # for 8-bit/4-bit quantization (可选)
 gymnasium>=0.29.0
 # [修复] 为代码中的 np 调用添加 numpy 依赖
 numpy>=1.23.0
+flash-attn --no-build-isolation
 # faiss-gpu # 如果您的CUDA版本匹配，可以直接安装
 # 推荐使用conda安装Faiss以避免编译问题: conda install -c pytorch faiss-gpu
 
@@ -31,7 +33,7 @@ colorlog>=6.7.0 # for pretty Hydra logging
 
 # --- Utilities ---
 tqdm>=4.65.0
-wandb>=0.16.0 # For experiment logging & tracking
+swanlab>=0.2.0 # For experiment logging & tracking
 sentence-transformers>=2.2.2 # 用于通用的句子嵌入模型（如果需要）
 requests>=2.31.0
 

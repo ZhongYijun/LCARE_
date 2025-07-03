@@ -5,13 +5,9 @@
 defaults:
   - critic: qwen3b
   - token_reward_model: qwen1.8b_trm
+  - lora_config_default  # [FIX] 引用可重用的LoRA配置
 
 # Actor 配置 (保持不变)
 name: "qwen7b"
-path: "Qwen/Qwen2.5-7B-Instruct"
+path: "models/Qwen2.5-7B-Instruct"
 use_lora: true
-lora_config:
-  r: 16
-  lora_alpha: 32
-  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-  task_type: "CAUSAL_LM"

@@ -3,46 +3,47 @@
 
 _target_: src.trainers.rl_agent.LCARE_Agent
 
-initial_policy_path: "${...trainer.sft.output_dir}"
+initial_policy_path: "outputs/init_policy_rft_checkpoint"
 
+sync_local_actor_interval: 5
 # [CRITICAL] 在RL阶段，我们将覆盖模型的默认设置，禁用LoRA以进行全参数微调
-use_lora: false
+use_lora: true
 
 env:
   problem_set_path: "${data.processed_dir}/${data.rl_prompt_file}"
-  max_steps_per_episode: 32
+  max_steps_per_episode: 8
 
 exploration:
-  total_iterations: 100
+  total_iterations: 80
   # 每次迭代采集海量数据, 为高强度更新提供养料
-  rollouts_per_iteration: 1024
-  learning_starts: 1024 # Buffer中至少有1024条轨迹才开始学习
+  rollouts_per_iteration: 64
+  learning_starts: 64 #buffer中至少有1024条轨迹才开始学习
   use_lge: true
   use_token_reward_model: true
   lge_config:
-    archive_capacity: 100000
-    k_nearest_neighbors: 5
+    archive_capacity: 10000
+    k_nearest_neighbors: 32
     bonus_coef: 0.001
 
 buffer:
-  capacity: 100000 # 极大地增加Buffer容量
+  capacity: 10000 # 极大地增加Buffer容量
   rebuild_index_freq: 10
   use_her: true
   use_per: true
   her_k_relabel: 4
   alpha: 0.6
   beta: 0.4
-  positive_capacity: 20000
+  positive_capacity: 5000
 
 algorithm:
-  learning_rate: 5.0e-7
-  trm_learning_rate: 2.0e-6
+  learning_rate: 2.0e-6
+  trm_learning_rate: 5.0e-6
   trm_warmup_steps: 10
   bc_loss_weight: 0.1
 
   # [AGGRESSIVE] 大幅增加PPO更新的深度和广度
-  ppo_epochs: 16
-  batch_size: 4096 # 全局批大小2048，每卡256，完美匹配H200
+  ppo_epochs: 8
+  batch_size: 128 # 全局批大小2048，每卡256，完美匹配H200
 
   clip_epsilon: 0.2
   vf_coef: 0.5
@@ -56,4 +57,19 @@ saving:
   save_interval: 10
 
 verifier:
-  hosts: []
+  # 总开关，控制在RL训练的trajectory验证中，是否启用LLM Judger作为后备
+  # 这主要用于需要高质量奖励信号的场景，如RFT或复杂任务
+  use_llm_judger_in_rl: False
+  
+  # 您的DeepSeek API服务地址列表。可以配置多个以实现负载均衡。
+  # 示例: hosts: ["api.deepseek.com"]
+  hosts: ["api.deepseek.com"]
+  
+  # 您的DeepSeek API Key。
+  # 强烈建议使用环境变量 `export DEEPSEEK_API_KEY="your_key"`
+  # 代码会优先读取环境变量。如果环境变量未设置，才会使用此处的key。
+  api_key: "sk-6c947070444143cd85853da2f2c6551d"
+
+  # API调用的重试配置
+  max_retries: 3
+  retry_delay: 1.0 # seconds

@@ -1,44 +1,122 @@
+# # configs/data/math_suite.yaml
+# # 这是项目中所有数据路径和数据源的唯一真实来源 (Single Source of Truth)。
+
+# # --- 1. 基础路径定义 ---
+# raw_dir: "data/raw"
+# processed_dir: "data/processed"
+
+# # --- 2. 处理后生成的文件名 ---
+# sft_train_file: "sft_train.parquet"
+# sft_test_file: "sft_test.parquet"
+# rl_prompt_file: "rl_prompt_pool.jsonl"
+# enhancement_sft_file: "sft_enhancement_data.parquet" # [NEW] 为增强数据定义文件名
+
+# # --- 3. 训练数据源定义 (在 build_math_datasets.py 中使用) ---
+# # 用于SFT冷启动和RL探索
+# rl_training_sources:
+#   - name: "OREAL-RL-Prompts"
+#     path: "internlm/OREAL-RL-Prompts"
+#     split: "train"
+
+# # --- 4. 技能增强数据源定义 (在 build_enhancement_data.py 中使用) ---
+# enhancement_sources:
+#   - name: "Math-Augmented"
+#     path: "nivektk/math-augmented-dataset"
+#     split: "train"
+
+# # --- 5. 评估数据集定义 (在 evaluate.py 中使用) ---
+# # 这些数据集严格只用于评估，绝不用于训练。
+# evaluation_datasets:
+#   - name: "MATH-500"
+#     path: "HuggingFaceH4/MATH-500"
+#     split: "test"
+#   - name: "AIME_2024"
+#     path: "HuggingFaceH4/aime_2024"
+#     split: "test"
+#   - name: "AIME_2025"
+#     path: "MathArena/aime_2025_I"
+#     split: "test"
+#   - name: "LiveMath"
+#     path: "opencompass/LiveMathBench"
+#     split: "test"
+#   - name: "Olympiad"
+#     path: "Hothan/OlympiadBench"
+#     split: "test"
+
 # configs/data/math_suite.yaml
-# 这是项目中所有数据路径和数据源的唯一真实来源 (Single Source of Truth)。
+# [RFT-ENABLED] 为真正的RFT流程更新了配置。
 
 # --- 1. 基础路径定义 ---
 raw_dir: "data/raw"
 processed_dir: "data/processed"
 
 # --- 2. 处理后生成的文件名 ---
-sft_train_file: "sft_train.parquet"
+# [NEW] 为RFT流程生成的数据文件
+rft_sft_file: "sft_from_rft_generation.parquet" 
+
+# 原有的文件名，部分现在作为备用或用于其他流程
+sft_train_file: "sft_train.parquet" # 这是从OREAL-Prompts预处理得到的，可作为快速实验的备份
 sft_test_file: "sft_test.parquet"
 rl_prompt_file: "rl_prompt_pool.jsonl"
-enhancement_sft_file: "sft_enhancement_data.parquet" # [NEW] 为增强数据定义文件名
+enhancement_sft_file: "sft_enhancement_data.parquet"
 
-# --- 3. 训练数据源定义 (在 build_math_datasets.py 中使用) ---
-# 用于SFT冷启动和RL探索
+# --- 3. [NEW] RFT样本生成阶段的数据源 ---
+# 这是模型要回答的问题集
+rft_generation_sources:
+  - name: "NuminaMath-CoT"
+    path: "AI-MO/NuminaMath-CoT"
+    split: "train"
+    question_key: "problem"  # [FIXED] 修正了键名，从 "question" 改为 "problem"
+    answer_key: "solution"
+
+  - name: "Math-Augmented"
+    path: "nivektk/math-augmented-dataset"
+    split: "train"
+    question_key: "problem"
+    answer_key: "solution"
+
+# --- 4. RL训练数据源定义 ---
+# OREAL-RL-Prompts 主要用于提供带有 pass_rate 和 gold_answer 的 RL Prompt Pool
 rl_training_sources:
   - name: "OREAL-RL-Prompts"
     path: "internlm/OREAL-RL-Prompts"
     split: "train"
+    question_key: "question"
+    answer_key: "gold_answer"
 
-# --- 4. 技能增强数据源定义 (在 build_enhancement_data.py 中使用) ---
+# --- 5. 技能增强数据源定义 ---
 enhancement_sources:
   - name: "Math-Augmented"
     path: "nivektk/math-augmented-dataset"
     split: "train"
+    question_key: "problem"
+    answer_key: "solution"
 
-# --- 5. 评估数据集定义 (在 evaluate.py 中使用) ---
-# 这些数据集严格只用于评估，绝不用于训练。
+# --- 6. 评估数据集定义 ---
 evaluation_datasets:
+
   - name: "MATH-500"
     path: "lightaime/MATH-500"
     split: "test"
+    question_key: "problem"
+    answer_key: "solution"
   - name: "AIME_2024"
     path: "HuggingFaceH4/aime_2024"
     split: "test"
+    question_key: "problem"
+    answer_key: "solution"
   - name: "AIME_2025"
     path: "MathArena/aime_2025_I"
     split: "test"
+    question_key: "problem"
+    answer_key: "solution"
   - name: "LiveMath"
     path: "opencompass/LiveMathBench"
     split: "test"
+    question_key: "problem"
+    answer_key: "answer"
   - name: "Olympiad"
     path: "Hothan/OlympiadBench"
     split: "test"
+    question_key: "problem"
+    answer_key: "answer"
